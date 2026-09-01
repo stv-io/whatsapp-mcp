@@ -16,10 +16,14 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    # cryptography 49+ no longer publishes Intel macOS wheels. Keep the
-    # developer-laptop install path working until the project deliberately
-    # drops x86_64 macOS support.
-    "cryptography>=48.0.1,<49",
+    # Upstream caps this at <49, because cryptography 49+ stopped publishing
+    # Intel macOS wheels and they want the developer-laptop install to keep
+    # working. That cap now holds back the fix for CVE-2026-69247 (PKCS#7,
+    # HIGH), and this fork exists to ship a linux/amd64 container
+    # (docs/adr/0002-amd64-only.md), where Intel macOS wheels are irrelevant.
+    # Floor is the fixed version so the CVE cannot reappear. Not imported
+    # anywhere in this package — it arrives via the MCP SDK.
+    "cryptography>=50.0.0",
     "httpx>=0.28.1",
     "mcp[cli]>=1.28.1,<2",
     "requests>=2.34.2",

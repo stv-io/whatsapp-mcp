@@ -38,7 +38,12 @@ COPY whatsapp-mcp-server /app/whatsapp-mcp-server
 # own pyproject.toml. Do NOT re-list them here: a hand-mirrored copy once
 # drifted to an unbounded `mcp[cli]`, picked up mcp 2.x, and every start died on
 # `ModuleNotFoundError: mcp.server.fastmcp`.
+# pip/setuptools/wheel are build tooling. Leaving them in the runtime image
+# ships CVEs in packages nothing runs (Trivy flagged `wheel` and setuptools'
+# vendored `jaraco.context` on the first build), so remove them once the
+# install is done. Nothing in the container installs packages at run time.
 RUN pip install --no-cache-dir --no-compile /app/whatsapp-mcp-server \
+ && pip uninstall -y pip setuptools wheel \
  && find /usr/local/lib/python3.11 -name '__pycache__' -type d -prune -exec rm -rf {} +
 
 COPY entrypoint.sh /entrypoint.sh
