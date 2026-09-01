@@ -9,6 +9,47 @@ A Model Context Protocol (MCP) server for WhatsApp, enabling Claude to read and 
 
 > Originally created by [Luke Harries](https://github.com/lharries/whatsapp-mcp). Maintained by [Very Good Plugins](https://verygoodplugins.com/?utm_source=github).
 
+---
+
+## ⚠️ This is a packaging fork
+
+This repository is a fork of
+[verygoodplugins/whatsapp-mcp](https://github.com/verygoodplugins/whatsapp-mcp),
+which is itself the maintained fork of
+[lharries/whatsapp-mcp](https://github.com/lharries/whatsapp-mcp). **Nearly all
+the code here is theirs.** See [`NOTICE.md`](NOTICE.md).
+
+It exists to add one thing upstream does not ship: **a container image**, and
+the pipeline that builds, tests, scans, signs and publishes it. It also carries
+a single fix to the HTTP transport, offered upstream as
+[#216](https://github.com/verygoodplugins/whatsapp-mcp/issues/216).
+
+**If you want the application, use upstream.** If you want it in a container,
+this is here:
+
+```bash
+docker pull ghcr.io/stv-io/whatsapp-mcp:0.6.0-1
+```
+
+Verify what you pulled — the image is signed keylessly by the workflow that
+built it, and carries SLSA provenance:
+
+```bash
+cosign verify ghcr.io/stv-io/whatsapp-mcp:0.6.0-1 \
+  --certificate-identity-regexp '^https://github\.com/stv-io/whatsapp-mcp/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+gh attestation verify oci://ghcr.io/stv-io/whatsapp-mcp:0.6.0-1 --owner stv-io
+```
+
+Container specifics, including the environment variables the image sets and the
+`WHATSAPP_MCP_ALLOWED_HOSTS` variable the transport fix adds, are documented in
+[`docs/adr/`](docs/adr/). **Report application bugs
+[upstream](https://github.com/verygoodplugins/whatsapp-mcp/issues)**; issues
+here should concern the image or the pipeline.
+
+---
+
 <p align="center">
   <a href="https://github.com/user-attachments/assets/9475af1d-2369-4315-9ccc-823dba2c5c32"><strong>Watch the WhatsApp MCP demo video</strong></a>
 </p>
