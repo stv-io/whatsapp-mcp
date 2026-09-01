@@ -1,0 +1,190 @@
+# Build, scan, sign and publish the container image.
+#
+# Packaging added by this fork; upstream ships no container. Tag convention and
+# the reasoning behind each control are in docs/adr/0004-image-tags.md.
+#
+# Third-party actions are pinned by commit SHA rather than a moving tag — a
+# mutable tag on an action that holds a registry token is the classic supply
+# chain hole. Dependabot keeps the pins current.
+name: Container
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["[0-9]+.[0-9]+.[0-9]+-[0-9]+"]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "entrypoint.sh"
+      - "whatsapp-bridge/**"
+      - "whatsapp-mcp-server/**"
+      - ".github/workflows/container.yml"
+  workflow_dispatch:
+
+# Default-deny; each job widens only what it needs.
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, scan and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # cosign keyless signing + provenance attestation
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # A published tag is never re-pushed: downstreams pin digests, and a tag
+      # that silently moves makes "what is actually running" unanswerable.
+      # GHCR does not enforce this, so the build does.
+      - name: Refuse to overwrite an existing tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh api "/user/packages/container/whatsapp-mcp/versions" \
+               --jq '.[].metadata.container.tags[]' 2>/dev/null | grep -qx "${tag}"; then
+            echo "::error::Tag ${tag} is already published. Bump the packaging" \
+                 "revision instead of re-pushing (docs/adr/0004-image-tags.md)."
+            exit 1
+          fi
+          echo "Tag ${tag} is free."
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to ${{ env.REGISTRY }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # No `latest`: it is the tag that makes a deployment unauditable.
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=whatsapp-mcp
+            org.opencontainers.image.description=WhatsApp MCP server and whatsmeow bridge
+            org.opencontainers.image.licenses=MIT
+
+      # Build once, load locally, smoke-test, and only then push. The smoke test
+      # is the check that would have caught an unbounded `mcp` dependency
+      # resolving to a major version that removed the module main.py imports.
+      - name: Build (load for testing)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: whatsapp-mcp:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — MCP initialize handshake
+        run: |
+          docker run -d --name smoke \
+            -e WHATSAPP_MCP_ALLOWED_HOSTS='localhost:*,127.0.0.1:*' \
+            -p 8000:8000 whatsapp-mcp:ci
+
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://127.0.0.1:8000/mcp \
+                 -H 'Accept: text/event-stream' 2>/dev/null \
+               || [ "$(curl -s -o /dev/null -w '%{http_code}' \
+                    http://127.0.0.1:8000/mcp -H 'Accept: text/event-stream')" != "000" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          body=$(curl -sS -X POST http://127.0.0.1:8000/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                 "protocolVersion":"2025-06-18","capabilities":{},
+                 "clientInfo":{"name":"ci","version":"1"}}}')
+
+          echo "${body}"
+          echo "${body}" | grep -q '"serverInfo"' \
+            || { echo '::error::MCP initialize handshake failed'; docker logs smoke; exit 1; }
+
+          # The allowlist must still reject anything not named in it.
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H 'Host: not-allowed.example:8000' -H 'Accept: text/event-stream' \
+            http://127.0.0.1:8000/mcp)
+          [ "${code}" = "421" ] \
+            || { echo "::error::DNS-rebinding protection not enforced (got ${code})"; exit 1; }
+
+          docker rm -f smoke
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: whatsapp-mcp:ci
+          severity: HIGH,CRITICAL
+          # Only fail on findings someone can actually act on. A gate that
+          # cannot be satisfied gets switched off within a month.
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          sbom: true
+          provenance: mode=max
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      # Keyless: the signing identity is this workflow's OIDC token, so there is
+      # no key to store, leak or rotate. Verification recipe is in the README.
+      - name: Sign the image
+        run: |
+          cosign sign --yes \
+            "${REGISTRY}/${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo '```'
+            echo "${REGISTRY}/${IMAGE_NAME}@${{ steps.build.outputs.digest }}"
+            echo '```'
+            echo
+            echo "Tags: \`${{ steps.meta.outputs.tags }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

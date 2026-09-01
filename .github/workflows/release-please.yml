@@ -15,6 +15,11 @@ jobs:
   release-please:
     name: Release Please
     runs-on: ubuntu-latest
+    # Upstream's release machinery. This is a packaging fork: its version must
+    # stay whatever upstream released, or the <upstream>-<revision> image tag
+    # convention (docs/adr/0004-image-tags.md) stops meaning anything. Guarded
+    # rather than deleted so it rebases cleanly and still runs upstream.
+    if: github.repository == 'verygoodplugins/whatsapp-mcp'
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
