@@ -80,7 +80,12 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # No `latest`: it is the tag that makes a deployment unauditable.
+          # No `latest`. The action's default is `latest=auto`, which quietly
+          # adds it on every tag push — it did exactly that on the first
+          # release, against docs/adr/0004-image-tags.md. `latest` is the tag
+          # that makes a deployment unauditable, and one that stops moving is
+          # worse than none at all.
+          flavor: latest=false
           tags: |
             type=ref,event=tag
             type=sha,prefix=sha-,format=short
