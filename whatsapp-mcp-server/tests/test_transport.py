@@ -2,7 +2,13 @@
 
 import pytest
 
-from mcp_config import resolve_host, resolve_port, resolve_transport
+from mcp_config import (
+    LOOPBACK_HOSTS,
+    resolve_allowed_hosts,
+    resolve_host,
+    resolve_port,
+    resolve_transport,
+)
 
 
 class TestResolveTransport:
@@ -76,3 +82,41 @@ class TestResolvePort:
         for value in ("0", "-1", "65536"):
             with pytest.raises(ValueError, match="Invalid WHATSAPP_MCP_PORT"):
                 resolve_port(value)
+
+
+class TestResolveAllowedHosts:
+    """Tests for resolve_allowed_hosts()."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (None, []),
+            ("", []),
+            ("   ", []),
+            (",", []),
+            (" , , ", []),
+            ("example.internal:8000", ["example.internal:8000"]),
+            ("example.internal:*", ["example.internal:*"]),
+            (
+                "a.internal:8000, b.internal:*",
+                ["a.internal:8000", "b.internal:*"],
+            ),
+            (
+                " a.internal:8000 ,, b.internal:8000 ",
+                ["a.internal:8000", "b.internal:8000"],
+            ),
+        ],
+    )
+    def test_values(self, value, expected):
+        assert resolve_allowed_hosts(value) == expected
+
+
+class TestLoopbackHosts:
+    """The set main.py checks before relaxing DNS-rebinding protection."""
+
+    def test_covers_what_the_sdk_treats_as_loopback(self):
+        assert LOOPBACK_HOSTS == {"127.0.0.1", "localhost", "::1"}
+
+    @pytest.mark.parametrize("value", ["0.0.0.0", "example.internal", "::"])
+    def test_excludes_non_loopback(self, value):
+        assert resolve_host(value) not in LOOPBACK_HOSTS
