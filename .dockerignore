@@ -1,0 +1,17 @@
+# Keep the build context to what the image actually needs: the Go bridge, the
+# Python server, and the entrypoint. Everything else is docs, CI and tooling.
+.git
+.github
+docs
+scripts
+*.md
+!whatsapp-mcp-server/README.md
+example-use.png
+release-please-config.json
+server.json
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.pyc
+**/.venv
+whatsapp-bridge/store
