@@ -4,8 +4,15 @@ import sys
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
-from mcp_config import resolve_host, resolve_port, resolve_transport
+from mcp_config import (
+    LOOPBACK_HOSTS,
+    resolve_allowed_hosts,
+    resolve_host,
+    resolve_port,
+    resolve_transport,
+)
 from parent_watchdog import install_stdio_parent_watchdog
 from whatsapp import (
     download_media as whatsapp_download_media,
@@ -484,6 +491,24 @@ if __name__ == "__main__":
         if transport != "stdio":
             mcp.settings.host = resolve_host(os.getenv("WHATSAPP_MCP_HOST"))
             mcp.settings.port = resolve_port(os.getenv("WHATSAPP_MCP_PORT"))
+            # FastMCP() above defaulted to 127.0.0.1, so the SDK already chose a
+            # loopback-only DNS-rebinding allowlist. Mutating settings.host does
+            # not revisit that, and the server would answer 421 Misdirected
+            # Request to every caller addressing it by any other name. Re-derive
+            # the policy now that the real host is known.
+            allowed_hosts = resolve_allowed_hosts(os.getenv("WHATSAPP_MCP_ALLOWED_HOSTS"))
+            if allowed_hosts:
+                mcp.settings.transport_security = TransportSecuritySettings(
+                    enable_dns_rebinding_protection=True,
+                    allowed_hosts=allowed_hosts,
+                )
+            elif mcp.settings.host not in LOOPBACK_HOSTS:
+                # Bound to a non-loopback address with no allowlist configured:
+                # the operator has deliberately opened this up, so protection
+                # that only permits loopback can only lock them out.
+                mcp.settings.transport_security = TransportSecuritySettings(
+                    enable_dns_rebinding_protection=False,
+                )
             # stdout is reserved for the protocol on stdio; log startup to stderr.
             print(
                 f"WhatsApp MCP server listening on {mcp.settings.host}:{mcp.settings.port} via {transport}",

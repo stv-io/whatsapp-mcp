@@ -12,6 +12,10 @@ TRANSPORT_ALIASES = {
 DEFAULT_MCP_HOST = "127.0.0.1"
 DEFAULT_MCP_PORT = 8000
 
+# Hosts the MCP SDK treats as loopback, for which it enables DNS-rebinding
+# protection automatically.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
 
 def resolve_transport(value: str | None) -> str:
     """Map a WHATSAPP_MCP_TRANSPORT value to a FastMCP transport name.
@@ -51,3 +55,12 @@ def resolve_port(value: str | None) -> int:
     if not 1 <= port <= 65535:
         raise ValueError(f"Invalid WHATSAPP_MCP_PORT={value!r}; must be between 1 and 65535") from None
     return port
+
+
+def resolve_allowed_hosts(value: str | None) -> list[str]:
+    """Parse WHATSAPP_MCP_ALLOWED_HOSTS into a list of Host header values.
+
+    Comma-separated. Each entry is an exact `host:port`, or `host:*` to accept
+    any port. Unset or whitespace-only yields an empty list.
+    """
+    return [entry.strip() for entry in (value or "").split(",") if entry.strip()]
