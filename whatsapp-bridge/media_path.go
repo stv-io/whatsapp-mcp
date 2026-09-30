@@ -141,3 +141,28 @@ func pathHasPrefix(child, parent string) bool {
 	rest := child[len(parent):]
 	return strings.HasPrefix(rest, string(os.PathSeparator))
 }
+
+// Inbound media directory.
+//
+// Downloaded attachments default to store/<chat>/, next to whatsapp.db
+// (linked-device keys), messages.db and .bridge-token. Sharing downloads with
+// another process therefore meant sharing the session. WHATSAPP_MEDIA_DIR
+// moves downloads to a directory of their own so it can be exposed (e.g.
+// mounted read-only into an agent's container) without the secrets beside it.
+const defaultMediaDir = "store"
+
+// mediaDir returns the directory downloaded media is written under.
+// Relative values resolve against the bridge's working directory, as the
+// default always has.
+func mediaDir() string {
+	if env := strings.TrimSpace(os.Getenv("WHATSAPP_MEDIA_DIR")); env != "" {
+		return env
+	}
+	return defaultMediaDir
+}
+
+// chatMediaDir returns the per-chat download directory. Colons are replaced
+// because they are invalid in Windows paths and awkward in URLs.
+func chatMediaDir(chatJID string) string {
+	return filepath.Join(mediaDir(), strings.ReplaceAll(chatJID, ":", "_"))
+}

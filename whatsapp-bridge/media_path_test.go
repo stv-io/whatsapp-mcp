@@ -128,3 +128,21 @@ func TestResolveMediaRootsAcceptsEnvList(t *testing.T) {
 		t.Fatalf("expected 2 roots, got %d", len(roots))
 	}
 }
+
+func TestChatMediaDirDefaultsToStore(t *testing.T) {
+	t.Setenv("WHATSAPP_MEDIA_DIR", "")
+	got := chatMediaDir("120363426758273498@g.us")
+	want := filepath.Join("store", "120363426758273498@g.us")
+	if got != want {
+		t.Fatalf("chatMediaDir = %q, want %q", got, want)
+	}
+}
+
+func TestChatMediaDirHonoursEnv(t *testing.T) {
+	t.Setenv("WHATSAPP_MEDIA_DIR", "  /data/media  ")
+	got := chatMediaDir("447700900000:12@s.whatsapp.net")
+	want := filepath.Join("/data/media", "447700900000_12@s.whatsapp.net")
+	if got != want {
+		t.Fatalf("chatMediaDir = %q, want %q", got, want)
+	}
+}
