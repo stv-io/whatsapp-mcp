@@ -161,7 +161,9 @@ func mediaDownloadStorePaths(chatJID, mediaType, messageID string, timestamp tim
 	}
 	filename := fmt.Sprintf("%s_%s_%s%s", mediaType, timestamp.Format("20060102_150405"), messageID, ext)
 
-	storeRoot, err := filepath.Abs("store")
+	// store/ by default; WHATSAPP_MEDIA_DIR when set (see mediaDir). The
+	// confinement checks below apply to whichever root is in use.
+	storeRoot, err := filepath.Abs(mediaDir())
 	if err != nil {
 		return "", "", "", fmt.Errorf("resolve media store path: %w", err)
 	}
@@ -2276,13 +2278,13 @@ func downloadMedia(client *whatsmeow.Client, messageStore *MessageStore, message
 		return false, "", "", "", err
 	}
 
-	// Create directory for the chat if it doesn't exist. Owner-only (0700):
-	// downloaded media can include private images/documents/voice notes.
-	if err := ensureOwnerOnlyDirectory(chatDir); err != nil {
+	// Create directory for the chat if it doesn't exist. Owner-only (0700)
+	// inside store/; see mediaDirMode for a dedicated WHATSAPP_MEDIA_DIR.
+	if err := ensureMediaDirectory(chatDir); err != nil {
 		return false, "", "", "", fmt.Errorf("failed to create chat directory: %v", err)
 	}
 
-	// mediaDownloadStorePaths returns an absolute, store-confined path.
+	// mediaDownloadStorePaths returns an absolute, media-root-confined path.
 	absPath := localPath
 
 	// Check if file already exists
@@ -2339,7 +2341,7 @@ func downloadMedia(client *whatsmeow.Client, messageStore *MessageStore, message
 
 	// Save the downloaded media to file. Owner-only (0600), same reasoning
 	// as the chat directory above.
-	if err := writeOwnerOnlyFile(localPath, mediaData); err != nil {
+	if err := writeMediaFile(localPath, mediaData); err != nil {
 		return false, "", "", "", fmt.Errorf("failed to save media file: %v", err)
 	}
 

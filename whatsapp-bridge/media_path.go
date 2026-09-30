@@ -184,3 +184,57 @@ func outboundFileName(mediaPath string) string {
 	}
 	return name
 }
+
+// Inbound media directory.
+//
+// Downloaded attachments default to store/<chat>/, next to whatsapp.db
+// (linked-device keys), messages.db and .bridge-token. Sharing downloads with
+// another process therefore meant sharing the session. WHATSAPP_MEDIA_DIR
+// moves downloads to a directory of their own so it can be exposed (e.g.
+// mounted read-only into an agent's container) without the secrets beside it.
+const defaultMediaDir = "store"
+
+// mediaDir returns the directory downloaded media is written under.
+// Relative values resolve against the bridge's working directory, as the
+// default always has.
+func mediaDir() string {
+	if env := strings.TrimSpace(os.Getenv("WHATSAPP_MEDIA_DIR")); env != "" {
+		return env
+	}
+	return defaultMediaDir
+}
+
+// mediaDirIsShared reports whether downloads go to a dedicated directory set
+// with WHATSAPP_MEDIA_DIR rather than into store/.
+func mediaDirIsShared() bool {
+	return strings.TrimSpace(os.Getenv("WHATSAPP_MEDIA_DIR")) != ""
+}
+
+// Download permissions. Inside store/ media stays owner-only (0700/0600), as
+// upstream intends: it sits beside the session keys. A dedicated
+// WHATSAPP_MEDIA_DIR exists precisely so another process can read it, and
+// that process usually runs as a different uid with no shared group (an
+// agent container that drops privileges resets its supplementary groups), so
+// there the files are world-readable (0755/0644). Restrict access to that
+// directory from outside, e.g. by only mounting it where it is needed.
+func mediaDirMode() os.FileMode {
+	if mediaDirIsShared() {
+		return 0o755
+	}
+	return 0o700
+}
+
+func mediaFileMode() os.FileMode {
+	if mediaDirIsShared() {
+		return 0o644
+	}
+	return 0o600
+}
+
+func ensureMediaDirectory(path string) error {
+	return os.MkdirAll(path, mediaDirMode())
+}
+
+func writeMediaFile(path string, data []byte) error {
+	return os.WriteFile(path, data, mediaFileMode())
+}

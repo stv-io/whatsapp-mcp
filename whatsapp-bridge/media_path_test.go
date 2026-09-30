@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // helper: create a temporary file inside dir and return its path.
@@ -206,5 +207,53 @@ func TestOutboundFileName(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMediaDownloadPathsDefaultToStore(t *testing.T) {
+	t.Setenv("WHATSAPP_MEDIA_DIR", "")
+	ts := time.Date(2026, 11, 15, 7, 0, 0, 0, time.UTC)
+	chatDir, localPath, _, err := mediaDownloadStorePaths("120363426758273498@g.us", "image", "ABC", ts)
+	if err != nil {
+		t.Fatalf("mediaDownloadStorePaths: %v", err)
+	}
+	storeRoot, _ := filepath.Abs("store")
+	if want := filepath.Join(storeRoot, "120363426758273498@g.us"); chatDir != want {
+		t.Fatalf("chatDir = %q, want %q", chatDir, want)
+	}
+	if !pathWithin(storeRoot, localPath) {
+		t.Fatalf("localPath %q escapes %q", localPath, storeRoot)
+	}
+	if mediaDirMode() != 0o700 || mediaFileMode() != 0o600 {
+		t.Fatalf("store/ media must stay owner-only, got %o/%o", mediaDirMode(), mediaFileMode())
+	}
+}
+
+func TestMediaDownloadPathsHonourEnv(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("WHATSAPP_MEDIA_DIR", "  "+root+"  ")
+	ts := time.Date(2026, 11, 15, 7, 0, 0, 0, time.UTC)
+	chatDir, localPath, filename, err := mediaDownloadStorePaths("447700900000:12@s.whatsapp.net", "document", "DEF", ts)
+	if err != nil {
+		t.Fatalf("mediaDownloadStorePaths: %v", err)
+	}
+	if want := filepath.Join(root, "447700900000_12@s.whatsapp.net"); chatDir != want {
+		t.Fatalf("chatDir = %q, want %q", chatDir, want)
+	}
+	if want := filepath.Join(chatDir, filename); localPath != want {
+		t.Fatalf("localPath = %q, want %q", localPath, want)
+	}
+	if mediaDirMode() != 0o755 || mediaFileMode() != 0o644 {
+		t.Fatalf("shared media dir must be readable by other uids, got %o/%o", mediaDirMode(), mediaFileMode())
+	}
+}
+
+func TestMediaDownloadPathsConfinedToMediaDir(t *testing.T) {
+	t.Setenv("WHATSAPP_MEDIA_DIR", t.TempDir())
+	ts := time.Date(2026, 11, 15, 7, 0, 0, 0, time.UTC)
+	for _, id := range []string{"..", "../escape", "a/b"} {
+		if _, _, _, err := mediaDownloadStorePaths("123@s.whatsapp.net", "image", id, ts); err == nil {
+			t.Fatalf("message ID %q was accepted", id)
+		}
 	}
 }
