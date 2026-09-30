@@ -27,7 +27,9 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.28.1,<2",
     "requests>=2.34.2",
-    "anyio<4.14",
+    # Was <4.14 (dependabot's widening of an old <4.9 regression pin). 4.14.2
+    # fixes CVE-2026-63374 (CRITICAL); the floor stops it coming back.
+    "anyio>=4.14.2,<5",
 ]
 
 [project.optional-dependencies]
