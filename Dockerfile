@@ -23,7 +23,7 @@ ENV CGO_ENABLED=1
 RUN go build -trimpath -ldflags="-s -w" -o /out/whatsapp-bridge .
 
 # ---- runtime: glibc/bookworm to match the CGO build ----
-FROM python:3.11-slim-bookworm@sha256:528257d48c1da0dcecc2e725d1ae34498d60c965f1241e39cd6a85a8859bdf84
+FROM python:3.11-slim-bookworm@sha256:a36c24f9cbdf4fd0f52d67f0823eeac19c2028c637cecc392d97f980d4fec56b
 
 # tini reaps zombies and forwards signals; entrypoint.sh relies on being able to
 # signal PID 1 to bring the container down when either process dies.
