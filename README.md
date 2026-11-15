@@ -515,7 +515,7 @@ Copy `.env.example` to `.env` and configure as needed:
 | `WHATSAPP_API_URL`     | `http://localhost:8080/api`              | Go bridge REST API URL                       |
 | `WHATSAPP_BRIDGE_TOKEN` | generated next to `WHATSMEOW_DB_PATH` as `.bridge-token` | Bearer token for bridge REST calls; also signed onto outbound webhook POSTs |
 | `WHATSAPP_MEDIA_ROOTS` | `~/.local/share/whatsapp-mcp/outbox`     | Path-list of directories allowed for outbound media files |
-| `WHATSAPP_MEDIA_DIR`   | `store` (bridge working dir)             | Where `download_media` writes attachments (`<dir>/<chat>/`). Set it to keep downloads apart from the session DBs, e.g. to share them read-only with another container |
+| `WHATSAPP_MEDIA_DIR`   | `store` (bridge working dir)             | Where `download_media` writes attachments (`<dir>/<chat>/`). Set it to keep downloads apart from the session DBs, e.g. to share them read-only with another container. Files there are `0644` (see Security Notice) |
 | `WHATSAPP_DEVICE_NAME` | `whatsmeow` (whatsmeow default)          | Label shown for this connection under WhatsApp > Linked Devices. Set to a recognisable name. Applies at pair time only (re-pair to change) |
 | `WHATSAPP_MCP_TRANSPORT` | `stdio`                                | MCP transport to serve clients: `stdio`, `http`, or `sse` |
 | `WHATSAPP_MCP_HOST`    | `127.0.0.1`                              | Bind address for the `http`/`sse` transports |
@@ -1118,6 +1118,13 @@ files request `0600`. This is local filesystem defense-in-depth; it does not
 encrypt data or protect it from privileged users, backups, or sync services.
 Existing directories and files retain their permissions: the bridge does not
 recursively change an existing store tree.
+
+**Fork exception:** when `WHATSAPP_MEDIA_DIR` is set, downloads go to that
+dedicated directory as `0755`/`0644` instead. Its purpose is to be read by
+another process, typically an agent container running as a different uid with
+no shared group, so owner-only would defeat it. `store/` itself stays
+owner-only. Limit who can reach the media directory from outside (e.g. mount it
+only where needed, read-only).
 
 ## License
 
