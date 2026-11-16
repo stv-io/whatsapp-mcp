@@ -9,7 +9,7 @@
 # release binaries are amd64-only. See docs/adr/0002-amd64-only.md.
 
 # ---- build the Go bridge (whatsmeow; CGO for go-sqlite3) ----
-FROM golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 AS bridge-build
+FROM golang:1.26-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS bridge-build
 
 WORKDIR /src/whatsapp-bridge
 
