@@ -232,9 +232,15 @@ func mediaFileMode() os.FileMode {
 }
 
 func ensureMediaDirectory(path string) error {
+	if !mediaDirIsShared() {
+		return ensureOwnerOnlyDirectory(path)
+	}
 	return os.MkdirAll(path, mediaDirMode())
 }
 
 func writeMediaFile(path string, data []byte) error {
+	if !mediaDirIsShared() {
+		return writeOwnerOnlyFile(path, data)
+	}
 	return os.WriteFile(path, data, mediaFileMode())
 }
